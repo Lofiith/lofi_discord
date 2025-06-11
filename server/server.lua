@@ -7,6 +7,9 @@ local function makeDiscordRequest(endpoint, method)
     PerformHttpRequest("https://discord.com/api/v10" .. endpoint, function(code, data, headers)
         if code == 200 then
             promise:resolve(json.decode(data))
+        elseif code == 401 then
+            print("^1[" .. GetCurrentResourceName() .. "]^0 Invalid Bot Token or Guild ID in config.lua - Get help at ^5discord.gg/lofidev^0")
+            promise:resolve(nil)
         else
             promise:resolve(nil)
         end
@@ -18,15 +21,6 @@ local function makeDiscordRequest(endpoint, method)
     return Citizen.Await(promise)
 end
 
-local function getDiscordId(source)
-    local identifiers = GetPlayerIdentifiers(source)
-    for _, id in pairs(identifiers) do
-        if string.match(id, "discord:") then
-            return string.gsub(id, "discord:", "")
-        end
-    end
-    return nil
-end
 
 local function updateCache(discordId, data)
     discordCache[discordId] = {
