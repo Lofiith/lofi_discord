@@ -55,7 +55,7 @@ AddEventHandler("playerConnecting", function(name, setKickReason, deferrals)
     
     local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
     if not memberData then
-        return -- Don't print anything if request failed, error already shown
+        return 
     end
     
     local userData = makeDiscordRequest("/users/" .. discordId)
