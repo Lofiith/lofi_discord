@@ -1,5 +1,6 @@
 local discordCache = {}
 local cacheExpiry = 300 -- 5 minutes cache
+local errorShown = {}
 
 local function makeDiscordRequest(endpoint, method)
     local promise = promise.new()
@@ -8,7 +9,10 @@ local function makeDiscordRequest(endpoint, method)
         if code == 200 then
             promise:resolve(json.decode(data))
         elseif code == 401 then
-            print("^1[" .. GetCurrentResourceName() .. "]^0 Invalid Bot Token or Guild ID in config.lua - Get help at ^5discord.gg/lofidev^0")
+            if not errorShown[401] then
+                errorShown[401] = true
+                print("^1[" .. GetCurrentResourceName() .. "]^0 Invalid Bot Token or Guild ID in config.lua - Get help at ^5discord.gg/lofidev^0")
+            end
             promise:resolve(nil)
         else
             promise:resolve(nil)
@@ -44,21 +48,22 @@ AddEventHandler("playerConnecting", function(name, setKickReason, deferrals)
     local discordId = getDiscordId(source)
     local resourceName = GetCurrentResourceName()
     
-    if discordId then
-        local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
-        local userData = makeDiscordRequest("/users/" .. discordId)
-        
-        if memberData and userData then
-            local roleCount = #memberData.roles
-            print(string.format("^2[%s]^0 %s joined ^7(^5%s^7 | ^3%d roles^7)^0", resourceName, name, userData.username, roleCount))
-        else
-            print(string.format("^2[%s]^0 %s joined ^7(^1No Discord^7)^0", resourceName, name))
-        end
-    else
+    if not discordId then
         print(string.format("^2[%s]^0 %s joined ^7(^1Discord not linked^7)^0", resourceName, name))
+        return
+    end
+    
+    local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
+    if not memberData then
+        return -- Don't print anything if request failed, error already shown
+    end
+    
+    local userData = makeDiscordRequest("/users/" .. discordId)
+    if userData then
+        local roleCount = #memberData.roles
+        print(string.format("^2[%s]^0 %s joined ^7(^5%s^7 | ^3%d roles^7)^0", resourceName, name, userData.username, roleCount))
     end
 end)
-
 
 -- Get Discord avatar
 exports("getAvatar", function(serverId)
