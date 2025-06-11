@@ -5,7 +5,7 @@ CreateThread(function()
     
     local resourceName = GetCurrentResourceName()
     
-    PerformHttpRequest("https://raw.githubusercontent.com/yourusername/Lofi_DiscordAPI/main/version.txt", function(code, data)
+    PerformHttpRequest("https://raw.githubusercontent.com/Lofiith/Lofi_VersionCheck/main/DiscordAPI.txt", function(code, data)
         if code == 200 then
             local latestVersion = data:gsub("%s+", "")
             if currentVersion == latestVersion then
