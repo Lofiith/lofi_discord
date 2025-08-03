@@ -1,42 +1,87 @@
-# Lofi Discord API System for FiveM
+# lofi_discord - Simple Discord API for FiveM
 
-This is a lightweight, optimized Discord API system for FiveM that provides seamless integration between your game server and Discord. It allows server owners to fetch player Discord data, verify roles, and track Discord-connected players with a simple export system. The script is designed with security and performance in mind, featuring built-in caching and server-side only execution.
+A lightweight, optimized Discord API system for FiveM servers. Simple to use with essential features and server-side security.
+
+## Features
+
+- Get Discord avatars, usernames, and display names
+- Check player roles (single or multiple)
+- Track player join/leave events with Discord info
+- Optional Discord requirement for server access
+- Built-in caching for performance
+- 100% server-side for security
+
+## Installation
+
+1. Download and place in your resources folder
+2. Rename folder to `lofi_discord` 
+3. Add `ensure lofi_discord` to your server.cfg
+4. Configure `config.lua` with your bot token and guild ID
+
+## Configuration
+
+```lua
+Config.Token = "YOUR_BOT_TOKEN_HERE"    -- Your Discord bot token
+Config.Guild = "YOUR_GUILD_ID_HERE"     -- Your Discord server ID
+
+Config.RequireDiscord = false           -- Kick players without Discord
+Config.TrackJoinLeave = true           -- Log player join/leave with Discord info  
+Config.AutoRefreshCache = true         -- Refresh cache on player connect
+```
+
+## Export Functions
+
+```lua
+-- Get Discord avatar URL
+local avatar = exports.lofi_discord:getAvatar(source)
+
+-- Get Discord username  
+local username = exports.lofi_discord:getUsername(source)
+
+-- Get display name (nickname or username)
+local displayName = exports.lofi_discord:getDisplayName(source)
+
+-- Check if player has a role
+local hasRole = exports.lofi_discord:hasRole(source, "123456789")
+
+-- Check multiple roles (any match)
+local hasAnyRole = exports.lofi_discord:hasRole(source, {"123", "456", "789"})
+
+-- Check multiple roles (require all)
+local hasAllRoles = exports.lofi_discord:hasRole(source, {"123", "456"}, true)
+
+-- Get all player roles
+local roles = exports.lofi_discord:getRoles(source)
+
+-- Check if player is in Discord guild
+local inGuild = exports.lofi_discord:isInGuild(source)
+
+-- Get complete user data
+local userData = exports.lofi_discord:getUser(source)
+
+-- Refresh player cache (force update)
+exports.lofi_discord:refreshCache(source)
+```
 
 ## Requirements
 
 - Discord Bot Token
-- Valid Guild ID
-- Players with linked Discord accounts
+- Discord Guild (Server) ID  
+- Bot permissions: Read Messages, View Server Members
 
-## Features
+## Example Usage
 
-- Fetch player Discord avatars and usernames instantly
-- Check single or multiple role permissions with flexible verification
-- Track Discord server member count and online players
-- Built-in caching system to prevent API spam and improve performance
-- Automatic version checking with color-coded console output
-- Player join notifications with Discord info and role count
-- 100% server-sided for maximum security
-
-## Installation
-
-1. Clone or download the repository.
-2. Copy the `Lofi_DiscordAPI` folder to your resources directory.
-3. Add `ensure Lofi_DiscordAPI` to your server.cfg.
-
-## Usage / Documentation
-
-For detailed usage instructions and documentation, please follow these steps:
-
-1. Create a Discord bot and obtain the bot token
-2. Add the bot to your Discord server with appropriate permissions
-3. Configure the `config.lua` with your bot token and guild ID
-4. Use the simple exports in your scripts:
-   - `exports.Lofi_DiscordAPI:getAvatar(source)`
-   - `exports.Lofi_DiscordAPI:getUsername(source)`
-   - `exports.Lofi_DiscordAPI:hasRole(source, roleId)`
-   - And more!
-
-## Contributing
-
-Contributions are welcome! Please submit pull requests or issues if you find bugs or have suggestions for improvement.
+```lua
+-- Check if player is admin
+RegisterCommand('admin', function(source, args, rawCommand)
+    local adminRole = "123456789012345678"
+    
+    if exports.lofi_discord:hasRole(source, adminRole) then
+        -- Give admin access
+        print("Admin access granted")
+    else
+        -- Deny access
+        print("Access denied")
+    end
+end)
+```

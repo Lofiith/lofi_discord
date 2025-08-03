@@ -3,10 +3,14 @@
 --------- https://discord.gg/lofidev ----------------
 -----------------------------------------------------
 
--- Fully server-sided, modders cannot dump it.
 Config = {}
 
-Config.BotToken = "YOUR_BOT_TOKEN_HERE" -- Replace with your actual bot token
-Config.GuildId = "YOUR_GUILD_ID_HERE" -- Replace with your Server guild ID
+-- Discord Configuration
+Config.Token = "YOUR_BOT_TOKEN_HERE" -- Your Discord bot token
+Config.Guild = "YOUR_GUILD_ID_HERE" -- Your Discord server ID
 
-Config.VersionCheck = true -- Set to false to disable version checking (Not recommended)
+-- Features
+Config.RequireDiscord = false -- Kick players without Discord
+Config.TrackJoinLeave = true -- Log player join/leave with Discord info
+Config.AutoRefreshCache = true -- Auto refresh cache on player connect (recommended)
+Config.VersionCheck = true -- Check for script updates on startup

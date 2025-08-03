@@ -1,20 +1,24 @@
-local currentVersion = "1.0.0"
+local currentVersion = "2.0.0"
 
 CreateThread(function()
     if not Config.VersionCheck then return end
     
-    local resourceName = GetCurrentResourceName()
+    Wait(2000) -- Wait for other components to load
     
-    PerformHttpRequest("https://raw.githubusercontent.com/Lofiith/Lofi_VersionCheck/main/DiscordAPI.txt", function(code, data)
+    print("^5[LOFI DISCORD] ^3[INFO]^0: Checking for updates...")
+    
+    PerformHttpRequest("https://raw.githubusercontent.com/Lofiith/Lofi_VersionCheck/main/lofi_discord.txt", function(code, data)
         if code == 200 then
-            local latestVersion = data:gsub("%s+", "")
+            local latestVersion = data:gsub("%s+", "") -- Remove whitespace
+            
             if currentVersion == latestVersion then
-                print("^2[" .. resourceName .. "]^0 Version ^2" .. currentVersion .. "^0 - You're running the ^2latest^0 version!")
+                print("^5[LOFI DISCORD] ^2[VERSION]^0: Running latest version ^6v" .. currentVersion .. "^0")
             else
-                print("^1[" .. resourceName .. "]^0 Version ^1" .. currentVersion .. "^0 - ^3Update available!^0 Latest: ^2" .. latestVersion .. "^0")
+                print("^5[LOFI DISCORD] ^3[VERSION]^0: Update available! ^1Current: v" .. currentVersion .. " ^7| ^2Latest: v" .. latestVersion .. "^0")
+                print("^5[LOFI DISCORD] ^3[INFO]^0: Download the latest version for bug fixes and new features")
             end
         else
-            print("^3[" .. resourceName .. "]^0 Unable to check version")
+            print("^5[LOFI DISCORD] ^3[VERSION]^0: Unable to check for updates (offline mode)")
         end
     end, "GET")
 end)

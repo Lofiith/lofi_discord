@@ -1,186 +1,244 @@
-local discordCache = {}
-local cacheExpiry = 300 -- 5 minutes cache
-local errorShown = {}
+local cache = {}
+local isReady = false
 
-local function makeDiscordRequest(endpoint, method)
+local function validateConfig()
+    if not Config.Token or Config.Token == "YOUR_BOT_TOKEN_HERE" then
+        print("^5[LOFI DISCORD] ^1[ERROR]^0: Bot token not configured in config.lua")
+        return false
+    end
+    
+    if not Config.Guild or Config.Guild == "YOUR_GUILD_ID_HERE" then
+        print("^5[LOFI DISCORD] ^1[ERROR]^0: Guild ID not configured in config.lua")
+        return false
+    end
+    
+    return true
+end
+
+local function removeEmojis(text)
+    if not text then return "" end
+    
+    local emoji = "[%z\1-\127\194-\244][\128-\191]*"
+    return text:gsub(emoji, function(char)
+        if char:byte() > 127 and char:byte() <= 244 then
+            return ''
+        else
+            return char
+        end
+    end)
+end
+
+local function getDiscordId(source)
+    if not source then return nil end
+    
+    local identifiers = GetPlayerIdentifiers(source)
+    if not identifiers then return nil end
+    
+    for _, identifier in pairs(identifiers) do
+        if identifier:match("discord:") then
+            return identifier:gsub("discord:", "")
+        end
+    end
+    
+    return nil
+end
+
+local function makeDiscordRequest(endpoint)
     local promise = promise.new()
     
     PerformHttpRequest("https://discord.com/api/v10" .. endpoint, function(code, data, headers)
         if code == 200 then
             promise:resolve(json.decode(data))
         elseif code == 401 then
-            if not errorShown[401] then
-                errorShown[401] = true
-                print("^1[" .. GetCurrentResourceName() .. "]^0 Invalid Bot Token or Guild ID in config.lua - Get help at ^5discord.gg/lofidev^0")
-            end
+            print("^5[LOFI DISCORD] ^1[ERROR]^0: Invalid bot token or insufficient permissions")
             promise:resolve(nil)
         else
             promise:resolve(nil)
         end
-    end, method or "GET", "", {
-        ["Authorization"] = "Bot " .. Config.BotToken,
+    end, "GET", "", {
+        ["Authorization"] = "Bot " .. Config.Token,
         ["Content-Type"] = "application/json"
     })
     
     return Citizen.Await(promise)
 end
 
-
 local function updateCache(discordId, data)
-    discordCache[discordId] = {
+    cache[discordId] = {
         data = data,
         timestamp = os.time()
     }
 end
 
 local function getCachedData(discordId)
-    if discordCache[discordId] then
-        if os.time() - discordCache[discordId].timestamp < cacheExpiry then
-            return discordCache[discordId].data
+    if cache[discordId] then
+        if os.time() - cache[discordId].timestamp < 300 then -- 5 minutes cache
+            return cache[discordId].data
         end
     end
     return nil
 end
 
--- Player join handler
-AddEventHandler("playerConnecting", function(name, setKickReason, deferrals)
+local function getDiscordUserData(discordId, useCache)
+    if not discordId then return nil end
+    
+    if useCache ~= false then
+        local cached = getCachedData(discordId)
+        if cached then return cached end
+    end
+    
+    local userData = makeDiscordRequest("/users/" .. discordId)
+    local memberData = makeDiscordRequest("/guilds/" .. Config.Guild .. "/members/" .. discordId)
+    
+    if not userData and not memberData then return nil end
+    
+    local result = {
+        user = userData,
+        member = memberData,
+        inGuild = memberData ~= nil,
+        roles = memberData and memberData.roles or {},
+        username = userData and userData.username or nil,
+        avatar = userData and userData.avatar and 
+            string.format("https://cdn.discordapp.com/avatars/%s/%s.%s", 
+                discordId, userData.avatar, userData.avatar:sub(1, 2) == "a_" and "gif" or "png") 
+            or "https://cdn.discordapp.com/embed/avatars/0.png",
+        nickname = memberData and memberData.nick or nil,
+        displayName = (memberData and memberData.nick) or (userData and userData.username) or nil
+    }
+    
+    updateCache(discordId, result)
+    return result
+end
+
+-- Player connected event
+RegisterNetEvent('lofi_discord:playerReady', function()
+    if not isReady then return end
+    
     local source = source
+    local playerName = GetPlayerName(source)
     local discordId = getDiscordId(source)
-    local resourceName = GetCurrentResourceName()
     
     if not discordId then
-        print(string.format("^2[%s]^0 %s joined ^7(^1Discord not linked^7)^0", resourceName, name))
+        if Config.TrackJoinLeave then
+            print("^5[LOFI DISCORD] ^3[INFO]^0: " .. playerName .. " ^7joined ^1(Discord not linked)^0")
+        end
+        
+        if Config.RequireDiscord then
+            DropPlayer(source, "Discord account required to join this server")
+        end
         return
     end
     
-    local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
-    if not memberData then
-        return 
+    if Config.AutoRefreshCache then
+        getDiscordUserData(discordId, false) -- Force refresh
     end
     
-    local userData = makeDiscordRequest("/users/" .. discordId)
-    if userData then
-        local roleCount = #memberData.roles
-        print(string.format("^2[%s]^0 %s joined ^7(^5%s^7 | ^3%d roles^7)^0", resourceName, name, userData.username, roleCount))
+    if Config.TrackJoinLeave then
+        local userData = getDiscordUserData(discordId)
+        if userData and userData.inGuild then
+            local roleCount = #userData.roles
+            local displayName = userData.displayName or "Unknown"
+            print("^5[LOFI DISCORD] ^3[INFO]^0: " .. playerName .. " ^7joined ^2(" .. displayName .. " ^7| ^6" .. roleCount .. " roles^2)^0")
+        else
+            print("^5[LOFI DISCORD] ^3[INFO]^0: " .. playerName .. " ^7joined ^3(Not in Discord guild)^0")
+        end
     end
 end)
 
--- Get Discord avatar
-exports("getAvatar", function(serverId)
-    local discordId = getDiscordId(serverId)
-    if not discordId then return nil end
+-- Player dropped event
+AddEventHandler('playerDropped', function(reason)
+    local source = source
+    local discordId = getDiscordId(source)
     
-    local cached = getCachedData(discordId)
-    if cached and cached.avatar then
-        return cached.avatar
+    if discordId then
+        cache[discordId] = nil -- Clean up cache
     end
-    
-    local userData = makeDiscordRequest("/users/" .. discordId)
-    if userData then
-        local avatar = userData.avatar and 
-            string.format("https://cdn.discordapp.com/avatars/%s/%s.%s", 
-                discordId, userData.avatar, 
-                userData.avatar:sub(1, 2) == "a_" and "gif" or "png") 
-            or "https://cdn.discordapp.com/embed/avatars/0.png"
-        
-        updateCache(discordId, {avatar = avatar, username = userData.username})
-        return avatar
-    end
-    return nil
 end)
 
--- Get Discord username
-exports("getUsername", function(serverId)
-    local discordId = getDiscordId(serverId)
-    if not discordId then return nil end
+-- Initialize Discord connection
+CreateThread(function()
+    Wait(1000)
     
-    local cached = getCachedData(discordId)
-    if cached and cached.username then
-        return cached.username
-    end
+    if not validateConfig() then return end
     
-    local userData = makeDiscordRequest("/users/" .. discordId)
-    if userData then
-        updateCache(discordId, {username = userData.username})
-        return userData.username
+    local guildData = makeDiscordRequest("/guilds/" .. Config.Guild)
+    if guildData then
+        isReady = true
+        print("^5[LOFI DISCORD] ^2[SUCCESS]^0: Connected to Discord guild ^6'" .. removeEmojis(guildData.name) .. "'^0")
+    else
+        print("^5[LOFI DISCORD] ^1[ERROR]^0: Failed to connect to Discord guild")
     end
-    return nil
 end)
 
--- Check if user has role(s)
-exports("hasRole", function(serverId, roles, requireAll)
-    local discordId = getDiscordId(serverId)
-    if not discordId then return false end
+-- Exports
+exports('getAvatar', function(source)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
+    return userData and userData.avatar or nil
+end)
+
+exports('getUsername', function(source)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
+    return userData and userData.username or nil
+end)
+
+exports('getDisplayName', function(source)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
+    return userData and userData.displayName or nil
+end)
+
+exports('hasRole', function(source, roleIds, requireAll)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
     
-    local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
-    if not memberData then return false end
+    if not userData or not userData.inGuild then return false end
     
     local userRoles = {}
-    for _, roleId in pairs(memberData.roles) do
+    for _, roleId in pairs(userData.roles) do
         userRoles[roleId] = true
     end
     
-    if type(roles) == "string" then
-        return userRoles[roles] ~= nil
-    elseif type(roles) == "table" then
-        local count = 0
-        for _, roleId in pairs(roles) do
+    if type(roleIds) == "string" then
+        return userRoles[roleIds] ~= nil
+    elseif type(roleIds) == "table" then
+        local matches = 0
+        for _, roleId in pairs(roleIds) do
             if userRoles[roleId] then
-                count = count + 1
+                matches = matches + 1
+                if not requireAll then return true end
             end
         end
         
-        if requireAll then
-            return count == #roles
-        else
-            return count > 0
-        end
+        return requireAll and matches == #roleIds or matches > 0
     end
     
     return false
 end)
 
--- Get guild member count
-exports("getGuildMemberCount", function()
-    local guildData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "?with_counts=true")
-    if guildData then
-        return guildData.member_count
-    end
-    return 0
+exports('getRoles', function(source)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
+    return userData and userData.roles or {}
 end)
 
--- Get online Discord members in-game
-exports("getOnlineDiscordMembers", function()
-    local count = 0
-    local players = GetPlayers()
-    
-    for _, playerId in pairs(players) do
-        local discordId = getDiscordId(playerId)
-        if discordId then
-            local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
-            if memberData then
-                count = count + 1
-            end
-        end
-    end
-    
-    return count
+exports('isInGuild', function(source)
+    local discordId = getDiscordId(source)
+    local userData = getDiscordUserData(discordId)
+    return userData and userData.inGuild or false
 end)
 
--- Get user roles
-exports("getUserRoles", function(serverId)
-    local discordId = getDiscordId(serverId)
-    if not discordId then return {} end
-    
-    local memberData = makeDiscordRequest("/guilds/" .. Config.GuildId .. "/members/" .. discordId)
-    if memberData then
-        return memberData.roles
-    end
-    return {}
+exports('getUser', function(source)
+    local discordId = getDiscordId(source)
+    return getDiscordUserData(discordId)
 end)
 
--- Get role count
-exports("getRoleCount", function(serverId)
-    local roles = exports["Lofi_DiscordAPI"]:getUserRoles(serverId)
-    return #roles
+exports('refreshCache', function(source)
+    local discordId = getDiscordId(source)
+    if discordId then
+        cache[discordId] = nil
+        return getDiscordUserData(discordId, false) ~= nil
+    end
+    return false
 end)
