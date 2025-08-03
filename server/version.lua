@@ -1,4 +1,4 @@
-local currentVersion = "2.0.0"
+local currentVersion = "1.0.1"
 
 CreateThread(function()
     if not Config.VersionCheck then return end
