@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Lofi'
 description 'Simple Discord API for FiveM'
-version '2.0.0'
+version '1.0.1'
 
 client_script 'client/client.lua'
 
